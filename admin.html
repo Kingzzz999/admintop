@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Zeval — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg1:#0f2027; --bg2:#203a43; --accent:#00c6ff; --glass:rgba(255,255,255,0.05);
+}
+*{box-sizing:border-box;font-family:'Poppins',sans-serif}
+html,body{margin:0;height:100%;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#fff}
+.container{max-width:900px;margin:40px auto;padding:20px}
+h1{color:var(--accent);text-align:center;margin-bottom:20px}
+.card{background:var(--glass);padding:18px;border-radius:12px;margin-bottom:18px}
+button{background:var(--accent);border:none;color:#002;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+small{color:#a8c1cc}
+.req-list{max-height:450px;overflow-y:auto}
+.req-item{border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:10px}
+.req-item h3{margin:0;color:var(--accent)}
+.req-item p{margin:4px 0}
+.balance-card{margin-top:30px;background:rgba(255,255,255,0.03);padding:16px;border-radius:10px;text-align:center}
+input{padding:8px;width:100%;border-radius:8px;border:none;background:rgba(255,255,255,0.08);color:#fff;margin:5px 0}
+.logout{position:fixed;right:20px;top:20px;color:#ccc;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="logout" onclick="logout()">🚪 Logout</div>
+<div class="container">
+  <h1>Panel Admin — Zeval Digital</h1>
+
+  <div class="card">
+    <h2>Permintaan Top Up</h2>
+    <div class="req-list" id="reqList">Memuat...</div>
+  </div>
+
+  <div class="card balance-card">
+    <h2>Kirim Saldo Manual</h2>
+    <input id="manualEmail" placeholder="Email pengguna">
+    <input id="manualAmount" type="number" placeholder="Nominal (Rp)">
+    <button onclick="sendManual()">Kirim Saldo</button>
+  </div>
+</div>
+
+<script>
+const BOT_TOKEN = "7922890768:AAFdcW7_3-Tbf_M0ooXPhs3cLFLE4QKfjd8";
+const CHAT_ID = "7975421614";
+
+/* Utility */
+function getUsers(){return JSON.parse(localStorage.getItem("users")||"[]")}
+function setUsers(v){localStorage.setItem("users",JSON.stringify(v))}
+function getRequests(){return JSON.parse(localStorage.getItem("requests")||"[]")}
+function setRequests(v){localStorage.setItem("requests",JSON.stringify(v))}
+
+function sendTelegram(msg){
+  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({chat_id:CHAT_ID,text:msg,parse_mode:"HTML"})
+  });
+}
+
+/* RENDER REQUESTS */
+function renderRequests(){
+  const list=document.getElementById("reqList");
+  const reqs=getRequests();
+  if(reqs.length===0){list.innerHTML="<p>Tidak ada permintaan.</p>";return;}
+  list.innerHTML="";
+  reqs.forEach((r,i)=>{
+    const div=document.createElement("div");
+    div.className="req-item";
+    div.innerHTML=`
+      <h3>${r.service}</h3>
+      <p><b>User:</b> ${r.user}</p>
+      <p><b>Email:</b> ${r.email}</p>
+      <p><b>Target:</b> ${r.target}</p>
+      <p><b>Nominal:</b> Rp${r.nominal.toLocaleString("id-ID")}</p>
+      <p><b>Status:</b> ${r.status}</p>
+      <button onclick="approve(${i})">✔️ Proses</button>
+      <button onclick="removeReq(${i})">❌ Hapus</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+/* APPROVE */
+function approve(i){
+  const reqs=getRequests();
+  const r=reqs[i];
+  if(!r)return;
+
+  const users=getUsers();
+  const u=users.find(x=>x.email===r.email);
+  if(!u)return alert("User tidak ditemukan!");
+  u.saldo=(u.saldo||0)+r.nominal;
+  u.history=u.history||[];
+  u.history.unshift({type:`TopUp ${r.service}`,amount:r.nominal});
+  setUsers(users);
+
+  reqs.splice(i,1);
+  setRequests(reqs);
+  sendTelegram(`<b>✅ Top Up Berhasil</b>\nUser: ${r.user}\nEmail: ${r.email}\nNominal: Rp${r.nominal.toLocaleString("id-ID")}`);
+  alert("Saldo berhasil dikirim ke user!");
+  renderRequests();
+}
+
+/* REMOVE */
+function removeReq(i){
+  const reqs=getRequests();
+  reqs.splice(i,1);
+  setRequests(reqs);
+  renderRequests();
+}
+
+/* MANUAL SEND */
+function sendManual(){
+  const email=document.getElementById("manualEmail").value.trim();
+  const amount=parseInt(document.getElementById("manualAmount").value);
+  if(!email||!amount)return alert("Lengkapi data!");
+  const users=getUsers();
+  const u=users.find(x=>x.email===email);
+  if(!u)return alert("User tidak ditemukan!");
+  u.saldo=(u.saldo||0)+amount;
+  u.history=u.history||[];
+  u.history.unshift({type:"Manual Admin",amount});
+  setUsers(users);
+  sendTelegram(`<b>💸 Transfer Manual</b>\nKepada: ${u.username}\nEmail: ${email}\nNominal: Rp${amount.toLocaleString("id-ID")}`);
+  alert("Saldo dikirim!");
+}
+
+/* LOGOUT */
+function logout(){
+  location.href="user.html";
+}
+
+/* AUTO LOAD */
+window.onload=renderRequests;
+</script>
+</body>
+</html>
